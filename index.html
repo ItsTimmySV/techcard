@@ -66,6 +66,9 @@
             font-size: 1.1rem;
             margin-top: 15px;
         }
+        .btn-danger {
+            margin-top: 10px;
+        }
     </style>
 </head>
 <body>
@@ -92,6 +95,7 @@
                 <div class="circle" data-index="6"></div>
             </div>
             <button class="btn btn-success" id="redeem" style="display: none;">Canjear Descuento</button>
+            <button class="btn btn-danger" id="logoutButton">Cerrar Sesión</button>
             <p class="message" id="message"></p>
         </div>
     </div>
@@ -120,6 +124,7 @@
         const passwordInput = document.getElementById("password");
         const registerButton = document.getElementById("register");
         const loginButton = document.getElementById("login");
+        const logoutButton = document.getElementById("logoutButton");
         const cardSection = document.getElementById("card");
         const authSection = document.getElementById("auth");
         const circles = document.querySelectorAll('.circle');
@@ -128,6 +133,19 @@
         const qrcodeDiv = document.getElementById("qrcode");
 
         let userId;
+
+        // Verificar si hay una sesión activa
+        auth.onAuthStateChanged((user) => {
+            if (user) {
+                userId = user.uid;
+                setupRealTimeListener(userId);
+                cardSection.style.display = "block";
+                authSection.style.display = "none";
+            } else {
+                authSection.style.display = "block";
+                cardSection.style.display = "none";
+            }
+        });
 
         // Registro de usuario
         registerButton.addEventListener("click", () => {
@@ -138,7 +156,6 @@
                 .then(userCredential => {
                     userId = userCredential.user.uid;
                     db.collection("loyaltyCards").doc(userId).set({ purchases: 0 });
-                    setupRealTimeListener(userId);
                 })
                 .catch(error => console.error("Error registrando usuario", error));
         });
@@ -151,9 +168,17 @@
             auth.signInWithEmailAndPassword(email, password)
                 .then(userCredential => {
                     userId = userCredential.user.uid;
-                    setupRealTimeListener(userId);
                 })
                 .catch(error => console.error("Error iniciando sesión", error));
+        });
+
+        // Cerrar sesión
+        logoutButton.addEventListener("click", () => {
+            auth.signOut().then(() => {
+                alert("Sesión cerrada exitosamente.");
+            }).catch(error => {
+                console.error("Error cerrando sesión:", error);
+            });
         });
 
         // Configurar escuchador en tiempo real para actualizaciones de compras
@@ -167,9 +192,6 @@
                     console.error("Documento no encontrado");
                 }
             });
-
-            cardSection.style.display = "block";
-            authSection.style.display = "none";
             generateQRCode(userId);
         }
 
