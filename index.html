@@ -1,0 +1,217 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Sistema de Lealtad</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0-alpha3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/qrcode/build/qrcode.min.js"></script>
+    <script src="https://unpkg.com/html5-qrcode/minified/html5-qrcode.min.js"></script>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            margin: 0;
+            background-color: #f8f9fa;
+        }
+        .loyalty-card {
+            background: #ffffff;
+            border-radius: 12px;
+            padding: 30px;
+            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+            text-align: center;
+            max-width: 400px;
+            width: 100%;
+        }
+        .loyalty-card h1 {
+            font-size: 1.8rem;
+            color: #333;
+            margin-bottom: 20px;
+        }
+        .circles {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 20px;
+        }
+        .circle {
+            width: 50px;
+            height: 50px;
+            border: 3px solid #ddd;
+            border-radius: 50%;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            font-size: 1.2rem;
+            color: #ddd;
+            cursor: pointer;
+            transition: 0.3s;
+        }
+        .circle.filled {
+            background-color: #0d6efd;
+            color: #fff;
+            border-color: #0d6efd;
+        }
+        .btn-primary {
+            width: 100%;
+            margin-top: 10px;
+        }
+        .btn-success {
+            margin-top: 10px;
+        }
+        .message {
+            color: #0d6efd;
+            font-size: 1.1rem;
+            margin-top: 15px;
+        }
+    </style>
+</head>
+<body>
+    <div class="loyalty-card">
+        <h1>Tarjeta de Lealtad</h1>
+        <div id="auth">
+            <p>Inicia sesión con tu correo electrónico:</p>
+            <input type="email" id="email" class="form-control mb-2" placeholder="Correo Electrónico" />
+            <input type="password" id="password" class="form-control mb-2" placeholder="Contraseña" />
+            <button id="register" class="btn btn-primary">Registrarse</button>
+            <button id="login" class="btn btn-secondary">Iniciar Sesión</button>
+        </div>
+        <div id="card" style="display: none;">
+            <div id="qrSection">
+                <p>Tu código QR:</p>
+                <div id="qrcode"></div>
+            </div>
+            <div class="circles" id="circles">
+                <div class="circle" data-index="1"></div>
+                <div class="circle" data-index="2"></div>
+                <div class="circle" data-index="3"></div>
+                <div class="circle" data-index="4"></div>
+                <div class="circle" data-index="5"></div>
+                <div class="circle" data-index="6"></div>
+            </div>
+            <button class="btn btn-success" id="redeem" style="display: none;">Canjear Descuento</button>
+            <p class="message" id="message"></p>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0-alpha3/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.17.2/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.17.2/firebase-auth-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.17.2/firebase-firestore-compat.js"></script>
+    <script>
+        // Configuración de Firebase
+        const firebaseConfig = {
+  apiKey: "AIzaSyBV7aFTNp8BNZoT-3kJvOWhrR5fA_mrUos",
+  authDomain: "techcard-ac30e.firebaseapp.com",
+  projectId: "techcard-ac30e",
+  storageBucket: "techcard-ac30e.firebasestorage.app",
+  messagingSenderId: "193812816787",
+  appId: "1:193812816787:web:4096953d9ec882fed03e66"
+};
+
+        const app = firebase.initializeApp(firebaseConfig);
+        const auth = firebase.auth();
+        const db = firebase.firestore();
+
+        // Elementos del DOM
+        const emailInput = document.getElementById("email");
+        const passwordInput = document.getElementById("password");
+        const registerButton = document.getElementById("register");
+        const loginButton = document.getElementById("login");
+        const cardSection = document.getElementById("card");
+        const authSection = document.getElementById("auth");
+        const circles = document.querySelectorAll('.circle');
+        const redeemButton = document.getElementById('redeem');
+        const message = document.getElementById('message');
+        const qrcodeDiv = document.getElementById("qrcode");
+
+        let userId;
+
+        // Registro de usuario
+        registerButton.addEventListener("click", () => {
+            const email = emailInput.value;
+            const password = passwordInput.value;
+
+            auth.createUserWithEmailAndPassword(email, password)
+                .then(userCredential => {
+                    userId = userCredential.user.uid;
+                    db.collection("loyaltyCards").doc(userId).set({ purchases: 0 });
+                    loadUserData();
+                })
+                .catch(error => console.error("Error registrando usuario", error));
+        });
+
+        // Inicio de sesión
+        loginButton.addEventListener("click", () => {
+            const email = emailInput.value;
+            const password = passwordInput.value;
+
+            auth.signInWithEmailAndPassword(email, password)
+                .then(userCredential => {
+                    userId = userCredential.user.uid;
+                    loadUserData();
+                })
+                .catch(error => console.error("Error iniciando sesión", error));
+        });
+
+        // Cargar datos del usuario
+        function loadUserData() {
+            db.collection("loyaltyCards").doc(userId).get().then(doc => {
+                if (doc.exists) {
+                    updateUI(doc.data().purchases);
+                    generateQRCode(userId);
+                } else {
+                    db.collection("loyaltyCards").doc(userId).set({ purchases: 0 });
+                }
+                cardSection.style.display = "block";
+                authSection.style.display = "none";
+            });
+        }
+
+        // Generar QR Code
+        function generateQRCode(userId) {
+    const qrcodeDiv = document.getElementById("qrcode");
+    qrcodeDiv.innerHTML = ""; // Limpiar cualquier contenido existente en el div
+
+    QRCode.toDataURL(userId, { width: 150 }, (error, url) => {
+        if (error) {
+            console.error("Error generando QR:", error);
+            return;
+        }
+        const img = document.createElement("img");
+        img.src = url; // Asignar la URL del código QR generado como fuente de la imagen
+        qrcodeDiv.appendChild(img); // Agregar la imagen al contenedor
+    });
+}
+
+
+        // Canjear descuento
+        redeemButton.addEventListener('click', () => {
+            db.collection("loyaltyCards").doc(userId).update({ purchases: 0 }).then(() => {
+                updateUI(0);
+                message.textContent = '';
+                redeemButton.style.display = "none";
+            });
+        });
+
+        function updateUI(purchases) {
+            circles.forEach((circle, index) => {
+                if (index < purchases) {
+                    circle.classList.add('filled');
+                } else {
+                    circle.classList.remove('filled');
+                }
+            });
+            if (purchases === 6) {
+                message.textContent = '¡Felicidades! Obtienes un 50% de descuento en tu próxima compra.';
+                redeemButton.style.display = "block";
+            } else {
+                message.textContent = '';
+                redeemButton.style.display = "none";
+            }
+        }
+    </script>
+</body>
+</html>
