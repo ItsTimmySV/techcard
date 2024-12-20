@@ -103,13 +103,13 @@
     <script>
         // Configuración de Firebase
         const firebaseConfig = {
-  apiKey: "AIzaSyBV7aFTNp8BNZoT-3kJvOWhrR5fA_mrUos",
-  authDomain: "techcard-ac30e.firebaseapp.com",
-  projectId: "techcard-ac30e",
-  storageBucket: "techcard-ac30e.firebasestorage.app",
-  messagingSenderId: "193812816787",
-  appId: "1:193812816787:web:4096953d9ec882fed03e66"
-};
+            apiKey: "AIzaSyBV7aFTNp8BNZoT-3kJvOWhrR5fA_mrUos",
+            authDomain: "techcard-ac30e.firebaseapp.com",
+            projectId: "techcard-ac30e",
+            storageBucket: "techcard-ac30e.firebasestorage.app",
+            messagingSenderId: "193812816787",
+            appId: "1:193812816787:web:4096953d9ec882fed03e66"
+        };
 
         const app = firebase.initializeApp(firebaseConfig);
         const auth = firebase.auth();
@@ -138,7 +138,7 @@
                 .then(userCredential => {
                     userId = userCredential.user.uid;
                     db.collection("loyaltyCards").doc(userId).set({ purchases: 0 });
-                    loadUserData();
+                    setupRealTimeListener(userId);
                 })
                 .catch(error => console.error("Error registrando usuario", error));
         });
@@ -151,46 +151,47 @@
             auth.signInWithEmailAndPassword(email, password)
                 .then(userCredential => {
                     userId = userCredential.user.uid;
-                    loadUserData();
+                    setupRealTimeListener(userId);
                 })
                 .catch(error => console.error("Error iniciando sesión", error));
         });
 
-        // Cargar datos del usuario
-        function loadUserData() {
-            db.collection("loyaltyCards").doc(userId).get().then(doc => {
+        // Configurar escuchador en tiempo real para actualizaciones de compras
+        function setupRealTimeListener(userId) {
+            db.collection("loyaltyCards").doc(userId).onSnapshot(doc => {
                 if (doc.exists) {
-                    updateUI(doc.data().purchases);
-                    generateQRCode(userId);
+                    const data = doc.data();
+                    console.log("Datos actualizados:", data);
+                    updateUI(data.purchases);
                 } else {
-                    db.collection("loyaltyCards").doc(userId).set({ purchases: 0 });
+                    console.error("Documento no encontrado");
                 }
-                cardSection.style.display = "block";
-                authSection.style.display = "none";
             });
+
+            cardSection.style.display = "block";
+            authSection.style.display = "none";
+            generateQRCode(userId);
         }
 
         // Generar QR Code
         function generateQRCode(userId) {
-    const qrcodeDiv = document.getElementById("qrcode");
-    qrcodeDiv.innerHTML = ""; // Limpiar cualquier contenido existente en el div
+            const qrcodeDiv = document.getElementById("qrcode");
+            qrcodeDiv.innerHTML = ""; // Limpiar cualquier contenido existente en el div
 
-    QRCode.toDataURL(userId, { width: 150 }, (error, url) => {
-        if (error) {
-            console.error("Error generando QR:", error);
-            return;
+            QRCode.toDataURL(userId, { width: 150 }, (error, url) => {
+                if (error) {
+                    console.error("Error generando QR:", error);
+                    return;
+                }
+                const img = document.createElement("img");
+                img.src = url; // Asignar la URL del código QR generado como fuente de la imagen
+                qrcodeDiv.appendChild(img); // Agregar la imagen al contenedor
+            });
         }
-        const img = document.createElement("img");
-        img.src = url; // Asignar la URL del código QR generado como fuente de la imagen
-        qrcodeDiv.appendChild(img); // Agregar la imagen al contenedor
-    });
-}
-
 
         // Canjear descuento
         redeemButton.addEventListener('click', () => {
             db.collection("loyaltyCards").doc(userId).update({ purchases: 0 }).then(() => {
-                updateUI(0);
                 message.textContent = '';
                 redeemButton.style.display = "none";
             });
